@@ -1,0 +1,7 @@
+Changes
+Makefile.PL
+MANIFEST
+MPL-1.1.txt
+README
+t/PSO.t
+lib/AI/PSO.pm

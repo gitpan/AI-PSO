@@ -6,3 +6,4 @@ ReactivePower-PSO-wks.pdf
 README
 t/PSO.t
 lib/AI/PSO.pm
+META.yml                                 Module meta-data (added by MakeMaker)

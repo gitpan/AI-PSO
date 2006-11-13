@@ -16,7 +16,7 @@ our @EXPORT = qw(
     pso_get_solution_array
 );
 
-our $VERSION = '0.81';
+our $VERSION = '0.82';
 
 
 ######################## BEGIN MODULE CODE #################################

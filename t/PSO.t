@@ -27,12 +27,9 @@ sub test_fitness_function(@) {
         foreach my $val (@arr) {
                 $sum += $val;
         }
-	if($sum <= $testValue + 0.01 && $sum >= $testValue - 0.01) {
-		$ret = 1;
-	}
-	else {
-		$ret = 0;
-	}
+	# sigmoid ==> squash the result to [0,1]
+	$ret = 1 / (1 + exp(-$testValue / $sum));
+	
 	return $ret;
 }
 

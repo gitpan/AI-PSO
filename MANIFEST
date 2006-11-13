@@ -2,6 +2,7 @@ Changes
 Makefile.PL
 MANIFEST
 MPL-1.1.txt
+ReactivePower-PSO-wks.pdf
 README
 t/PSO.t
 lib/AI/PSO.pm

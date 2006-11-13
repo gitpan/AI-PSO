@@ -1,6 +1,5 @@
 package AI::PSO;
 
-use 5.008008;
 use strict;
 use warnings;
 use Math::Random;
@@ -17,7 +16,7 @@ our @EXPORT = qw(
     pso_get_solution_array
 );
 
-our $VERSION = '0.80';
+our $VERSION = '0.81';
 
 
 ######################## BEGIN MODULE CODE #################################
@@ -437,7 +436,7 @@ PSO - Perl module for running the Particle Swarm Optimization algorithm
 
 =head1 SYNOPSIS
 
-  use PSO;
+  use AI::PSO;
 
   my %params = (
       numParticles   => 4,	# total number of particles involved in search (there is a trade-off between cooperation and time here if the fitness function takes a while...)

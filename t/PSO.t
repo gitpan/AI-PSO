@@ -4,7 +4,7 @@ BEGIN { use_ok('AI::PSO') };
 my %test_params = (
 	numParticles   => 4,
 	numNeighbors   => 3,
-	maxIterations  => 1000,
+	maxIterations  => 5000,
 	dimensions     => 4,
 	deltaMin       => -2.0,
 	deltaMax       =>  4.0,
@@ -14,7 +14,7 @@ my %test_params = (
 	themWeight     => 2.0,
 	themMin        => 0.0,
 	themMax        => 1.0,
-	exitFitness    => 1.0,
+	exitFitness    => 0.99,
 	verbose        => 1,
 );
 
@@ -27,9 +27,9 @@ sub test_fitness_function(@) {
         foreach my $val (@arr) {
                 $sum += $val;
         }
-	# sigmoid ==> squash the result to [0,1]
-	$ret = 1 / (1 + exp(-$testValue / $sum));
-	
+	# sigmoid-like ==> squash the result to [0,1] and get as close to 3.5 as we can
+	return 2 / (1 + exp(abs($testValue - $sum)));
+
 	return $ret;
 }
 
@@ -39,6 +39,3 @@ ok( pso_register_fitness_function('test_fitness_function') == 0);
 ok( pso_optimize() == 0 );
 my @solution = pso_get_solution_array();
 ok( $#solution == $test_params{numParticles} - 1);
-foreach my $solutionVal (@solution) {
-	print STDERR "$solutionVal\n";
-}

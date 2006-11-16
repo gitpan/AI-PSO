@@ -16,7 +16,7 @@ our @EXPORT = qw(
     pso_get_solution_array
 );
 
-our $VERSION = '0.82';
+our $VERSION = '0.85';
 
 
 ######################## BEGIN MODULE CODE #################################
@@ -469,69 +469,122 @@ PSO - Perl module for running the Particle Swarm Optimization algorithm
 
 
 
-  --- general guidelines ---
-  1. I suggest that meWeight and themWeight add up up to 4.0
-  2. If you have a large search space, increasing deltaMin and deltaMax and delta max can help cover more area
-     Conversely, if you have a small search space, then decreasing them will fine tune the search.
-  3. You really should set meMin and themMin to 0, and meMin and themMin to 1 unless you know what you are doing.
-  4. I've personally found that using a global (fully connected) topology where each particle is neighbors with
-     all other particles (numNeighbors == numParticles - 1) converges more quickly.  However, this will drastically
-     increase the number of calls to your fitness function.  So, if your fitness function is the bottleneck, then
-     you should tune this value for the appropriate time/accuracy trade-off.
-  5. The number of particles also increases cooperation and search space coverage at the expense of compute.
-     Typical applications should suffice using 20-40 particles.
+=head2  General Guidelines
 
-  * I force people to define all parameters, but guidelines 1-3 are standard and pretty safe.
+=over 4
 
-    
+=item * I suggest that meWeight and themWeight add up up to 4.0
+
+=item * If you have a large search space, increasing deltaMin and deltaMax and delta max can help cover more area
+		Conversely, if you have a small search space, then decreasing them will fine tune the search.
+
+=item * You really should set meMin and themMin to 0, and meMin and themMin to 1 unless you know what you are doing.
+
+=item * I've personally found that using a global (fully connected) topology where each particle is neighbors with
+		all other particles (numNeighbors == numParticles - 1) converges more quickly.  However, this will drastically
+		increase the number of calls to your fitness function.  So, if your fitness function is the bottleneck, then
+		you should tune this value for the appropriate time/accuracy trade-off.
+
+=item * The number of particles also increases cooperation and search space coverage at the expense of compute.
+        Typical applications should suffice using 20-40 particles.
+
+=item * NOTE: I force people to define all parameters, but guidelines 1-3 are standard and pretty safe.
+
+=back
 
 
 =head1 DESCRIPTION
 
-Particle Swarm Optimization is an optimization algorithm designed by Russell
-Eberhart and James Kennedy from Purdue University.  The algorithm itself is 
-based off of the emergent behavior among societal groups ranging from ants, 
-to flocking of birds, to swarming of bees.
+=over 4
+  Particle Swarm Optimization is an optimization algorithm designed by Russell Eberhart 
+  and James Kennedy from Purdue University.  The algorithm itself is 
+  based off of the emergent behavior among societal groups ranging from ants, 
+  to flocking of birds, to swarming of bees.
 
-It is a cooperative approach to optimization.  Instead of an evolutionary 
-approach which kills off unsuccessful members of the search team, each 
-particle in PSO shares its information with its neighboring particles.
-So, if one particle is not doing to well (has a low fitness), then it looks 
-to its neighbors for help and tries to be more like them while still 
-maintaining a sense of individuality.
+  It is a cooperative approach to optimization.  Instead of an evolutionary 
+  approach which kills off unsuccessful members of the search team, each 
+  particle in PSO shares its information with its neighboring particles.
+  So, if one particle is not doing to well (has a low fitness), then it looks 
+  to its neighbors for help and tries to be more like them while still 
+  maintaining a sense of individuality.
 
-A particle is defined by its position and velocity.  The parameters a user 
-wants to optimize define the dimension of the problem hyperspace.  So, if 
-you want to optimize three variables, a particle will be three dimensional 
-and will have 3 position values, 3 velocity values etc.
+  A particle is defined by its position and velocity.  The parameters a user 
+  wants to optimize define the dimension of the problem hyperspace.  So, if 
+  you want to optimize three variables, a particle will be three dimensional 
+  and will have 3 position values, 3 velocity values etc.
 
-Particles fly around the problem hyperspace looking for local/global maxima.  
-At each position, a particle computes its fitness.  If it does not meet the 
-exit criteria then it gets information from neighboring particles about how well 
-they are doing.  If a neighboring particle is doing better, then the current 
-particle tries to move closer to its neighbor by adjusting its weights.  The 
-velocity controls how quickly a particle changes location in the problem 
-hyperspace.  There are also some stochastic weights involved in the positional 
-updates so that each particle is truly independent and can take its own search 
-path while still incorporating good information from other particles.
+  Particles fly around the problem hyperspace looking for local/global maxima.  
+  At each position, a particle computes its fitness.  If it does not meet the 
+  exit criteria then it gets information from neighboring particles about how well 
+  they are doing.  If a neighboring particle is doing better, then the current 
+  particle tries to move closer to its neighbor by adjusting its weights.  The 
+  velocity controls how quickly a particle changes location in the problem 
+  hyperspace.  There are also some stochastic weights involved in the positional 
+  updates so that each particle is truly independent and can take its own search 
+  path while still incorporating good information from other particles.
 
-Solution convergence is quite fast once one particle becomes close to a local 
-maxima.  Having more particles active means there is more of a chance that you 
-will not be stuck in a local maxima.  Often times different neighborhoods 
-(when not configured in a global neighborhood fashion) will converge to different 
-maxima.  It is quite interesting to watch graphically.
+  Solution convergence is quite fast once one particle becomes close to a local 
+  maxima.  Having more particles active means there is more of a chance that you 
+  will not be stuck in a local maxima.  Often times different neighborhoods 
+  (when not configured in a global neighborhood fashion) will converge to different 
+  maxima.  It is quite interesting to watch graphically.
 
-The algorithm implemented in this module is taken from the book Swarm Intelligence 
-by Russell Eberhart and James Kennedy.  I highly suggest you read the book if you 
-are interested in this sort of thing.  There are a few minor implementation changes 
-I have made, but the heart of the algorithm is as stated in the book.
+  The algorithm implemented in this module is taken from the book Swarm Intelligence 
+  by Russell Eberhart and James Kennedy.  I highly suggest you read the book if you 
+  are interested in this sort of thing.  There are a few minor implementation changes 
+  I have made, but the heart of the algorithm is as stated in the book.
 
-=head2 EXPORT
 
-pso_set_params()
-pso_register_fitness_function()
-pso_optimize()
-pso_get_solution_array()
+
+=head1 EXPORTED FUNCTIONS
+
+=over 4
+
+=item * pso_set_params(%config_hash)
+
+  Sets the particle swarm configuration parameters to use for the search.
+
+=item * pso_register_fitness_function()
+ 
+  Sets the user defined fitness function to call.  The fitness function should 
+  return a value between 0 and 1.  Users may want to look into the sigmoid 
+  function [1 / (1+e^(-x))] and it's variants to implement this.
+  Also, you may want to take a look at either t/PSO.t for the simple test or 
+  examples/NeuralNetwork/pso_ann.pl for an example on how to train a simple 3-layer 
+  feed forward neural network.  (Note that a real training application would have a 
+  real dataset with many input-output pairs...pso_ann.pl is a _very_ simple example.
+  Also note that the neural network exmaple requires g++.  Type 'make run' in the 
+  examples/NeuralNetwork directory to run the example.  Lastly, the neuraal network
+  c++ code is in a very different coding style.  I did indeed write this, but it was
+  many years ago when I was striving to make my code nicely formatted and good looking :)).
+
+=item * pso_optimize()
+
+  Runs the particle swarm optimization algorithm.  This consists of running 
+  iterations of search and many calls to the fitness function you registered 
+  with pso_register_fitness_function()
+
+=item * pso_get_solution_array()
+
+  By default, pso_optimize() will print out to STDERR the first solution, or the best 
+  solution so far if the max iterations were reached.  This function will simply return 
+  an array of the winning (or best so far) position of the entire swarm system.  It is an 
+  array of floats to be used how you wish (like weights in a neural network!).
+
+=back
+
+
+
+=head1 EXAMPLES
+
+=over 4
+
+=item * examples/NeuralNet/pso_ann.pl
+=item * t/PSO.t
+
+=back
+
+
 
 =head1 SEE ALSO
 
@@ -539,12 +592,17 @@ pso_get_solution_array()
     ISBN 1-55860-595-9
 
 2.  A Hybrid Particle Swarm and Neural Network Approach for Reactive Power Control
+    AI-PSO-$VERSION/extradocs/ReactivePower-PSO-wks.pdf
     http://webapps.calvin.edu/~pribeiro/courses/engr302/Samples/ReactivePower-PSO-wks.pdf
+
+
 
 =head1 AUTHOR
 
 W. Kyle Schlansker 
 kylesch@gmail.com
+
+
 
 =head1 COPYRIGHT AND LICENSE
 

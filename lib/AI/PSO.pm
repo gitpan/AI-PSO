@@ -16,22 +16,12 @@ our @EXPORT = qw(
     pso_get_solution_array
 );
 
-our $VERSION = '0.85';
+our $VERSION = '0.86';
 
 
 ######################## BEGIN MODULE CODE #################################
 
 #---------- BEGIN GLOBAL PARAMETERS ------------
-
-###
-### CODE STYLE NOTE: 
-###       I (kyle schlansker) don't like to make assumptions or parameter defaults.
-###       This just leads to further assumptions by users.  I like to have users fully specify
-###       All parameters so they are forced to know what they are doing, and if anything in the
-###       future changes, they should understand how to adapt and will not be caught by surprise.
-###
-###       If you (a developer) adds to this module, I would appreciate it if you followed the same guidelines.
-###
 
 #-#-# search parameters #-#-#
 my $numParticles  = 'null';            # This is the number of particles that actually search the problem hyperspace
@@ -57,6 +47,9 @@ my $themWeight = 'null';               # 'social' weighting constant (higher wei
 my $themMin    = 'null';               # 'social' minimum random weight (this should really be between 0, 1)
 my $themMax    = 'null';               # 'social' maximum random weight (this should really be between 0, 1)
 
+my $psoRandomRange = 'null';           # PSO::.86 new variable to support original unmodified algorithm
+my $useModifiedAlgorithm = 'null';
+
 #-#-# user/debug parameters #-#-#
 my $verbose    = 0;                    # This one defaults for obvious reasons...
 
@@ -68,13 +61,6 @@ my $verbose    = 0;                    # This one defaults for obvious reasons..
 #           $meWeight   = random(0, $randomRange);
 #           $themWeight = $randomRange - $meWeight.
 #
-#      I decided to let the user define each, even though this eliminates one of the stochastic elements of the original algorithm.
-#      Perhaps I should make this configurable--it's not hard to do that.  In my personal applications I haven't needed to do this.
-#      It is important to note that the suggested sum of the two should be about 4.0, at least that has been empirically optimal.
-#
-#      You can also get rid of $meMin, $meMax, $themMin, $themMax if using the constant random range...
-#
-#      Feel free to hack at will :)
 #
 
 #----------   END  GLOBAL PARAMETERS ------------
@@ -97,7 +83,6 @@ my $verbose    = 0;                    # This one defaults for obvious reasons..
 #
 #   The velocity vector is obviously updated before the position vector...
 #
-#   *** Please see my above NOTE about the PSO random range -- I have diverged from the original algorithm here.
 #
 my @particles = ();
 my $user_fitness_function;
@@ -135,9 +120,16 @@ sub pso_set_params(%) {
     $themMin        = defined($params{themMin})        ? $params{themMin}        : 'null';
     $themMax        = defined($params{themMax})        ? $params{themMax}        : 'null';
 
+    $psoRandomRange = defined($params{psoRandomRange}) ? $params{psoRandomRange} : 'null';
+
     $verbose        = defined($params{verbose})        ? $params{verbose}        : $verbose;
 
-    my $param_string =  "$numParticles:$numNeighbors:$maxIterations:$dimensions:$exitFitness:$deltaMin:$deltaMax:$meWeight:$meMin:$meMax:$themWeight:$themMin:$themMax";
+    my $param_string;
+	if($psoRandomRange =~ m/null/) {
+		$param_string =  "$numParticles:$numNeighbors:$maxIterations:$dimensions:$exitFitness:$deltaMin:$deltaMax:$meWeight:$meMin:$meMax:$themWeight:$themMin:$themMax";
+	} else {
+		$param_string =  "$numParticles:$numNeighbors:$maxIterations:$dimensions:$exitFitness:$deltaMin:$deltaMax:$psoRandomRange";
+	}
     
     $retval = 1 if($param_string =~ m/null/);
 
@@ -161,7 +153,7 @@ sub pso_register_fitness_function($) {
 #  - runs the particle swarm optimization algorithm
 #
 sub pso_optimize() {
-    &initialize_particles();
+	&init();
     return &swarm();
 }
 
@@ -178,6 +170,20 @@ sub pso_get_solution_array() {
 
 
 #--------- BEGIN INTERNAL SUBROUTINES -----------
+
+#
+# init
+#   - initializes global variables
+#   - initializes particle data structures
+#
+sub init() {
+	if($psoRandomRange =~ m/null/) {
+		$useModifiedAlgorithm = 1;
+	} else {
+		$useModifiedAlgorithm = 0;
+	}
+	&initialize_particles();
+}
 
 #
 # initialize_particles
@@ -269,7 +275,7 @@ sub swarm() {
             if($fitness >= $exitFitness) {
                 #...write solution
                 print "Y:$iter:$p:$fitness\n";
-		&save_solution(@{$particles[$p]{bestPos}});
+                &save_solution(@{$particles[$p]{bestPos}});
                 &dump_particle($p);
                 return 0;
             } else {
@@ -292,16 +298,29 @@ sub swarm() {
             my @meDelta = ();       # array of self position updates
             my @themDelta = ();     # array of neighbor position updates
             for(my $d = 0; $d < $dimensions; $d++) {
-                my $meFactor = $meWeight * &random($meMin, $meMax);
-                my $themFactor = $themWeight * &random($themMin, $themMax);
-                $meDelta[$d] = $particles[$p]{bestPos}[$d] - $particles[$p]{currPos}[$d];
-                $themDelta[$d] = $particles[$n]{bestPos}[$d] - $particles[$p]{currPos}[$d];
-                my $delta = ($meFactor * $meDelta[$d]) + ($themFactor * $themDelta[$d]);
-                $delta += $particles[$p]{velocity}[$d];
+				if($useModifiedAlgorithm) { # this if shold be moved out much further, but i'm working on code refactoring first
+					my $meFactor = $meWeight * &random($meMin, $meMax);
+					my $themFactor = $themWeight * &random($themMin, $themMax);
+					$meDelta[$d] = $particles[$p]{bestPos}[$d] - $particles[$p]{currPos}[$d];
+					$themDelta[$d] = $particles[$n]{bestPos}[$d] - $particles[$p]{currPos}[$d];
+					my $delta = ($meFactor * $meDelta[$d]) + ($themFactor * $themDelta[$d]);
+					$delta += $particles[$p]{velocity}[$d];
 
-                # do the PSO position and velocity updates
-                $particles[$p]{velocity}[$d] = &clamp_velocity($delta);
-                $particles[$p]{nextPos}[$d] = $particles[$p]{currPos}[$d] + $particles[$p]{velocity}[$d];
+					# do the PSO position and velocity updates
+					$particles[$p]{velocity}[$d] = &clamp_velocity($delta);
+					$particles[$p]{nextPos}[$d] = $particles[$p]{currPos}[$d] + $particles[$p]{velocity}[$d];
+				} else {
+					my $rho1 = &random(0, $psoRandomRange);
+					my $rho2 = $psoRandomRange - $rho1;
+					$meDelta[$d] = $particles[$p]{bestPos}[$d] - $particles[$p]{currPos}[$d];
+					$themDelta[$d] = $particles[$n]{bestPos}[$d] - $particles[$p]{currPos}[$d];
+					my $delta = ($rho1 * $meDelta[$d]) + ($rho2 * $themDelta[$d]);
+					$delta += $particles[$p]{velocity}[$d];
+
+					# do the PSO position and velocity updates
+					$particles[$p]{velocity}[$d] = &clamp_velocity($delta);
+					$particles[$p]{nextPos}[$d] = $particles[$p]{currPos}[$d] + $particles[$p]{velocity}[$d];
+				}
             }
         }
 
@@ -432,32 +451,37 @@ __END__
 
 =head1 NAME
 
-PSO - Perl module for running the Particle Swarm Optimization algorithm
+AI::PSO - Module for running the Particle Swarm Optimization algorithm
 
 =head1 SYNOPSIS
 
   use AI::PSO;
 
   my %params = (
-      numParticles   => 4,	# total number of particles involved in search (there is a trade-off between cooperation and time here if the fitness function takes a while...)
-      numNeighbors   => 3,	# number of particles that each particle will share its progress with (degree of cooperation)
-      maxIterations  => 1000,	# maximum number of iterations before exiting with no solution found
-      dimensions     => 4,	# this must be the number of parameters you want to optimize (it will also be the size of the array passed to your fitness function)
-      deltaMin       => -4.0,	# minimum change in velocity during PSO update
-      deltaMax       =>  4.0,	# maximum change in velocity during PSO update
-      meWeight       => 2.0,	# 'individuality' weighting constant (higher weight (than group) means trust individual more, neighbors less)
-      meMin          => 0.0,	# 'individuality' minimum random weight (this should really be between 0, 1)
-      meMax          => 1.0,	# 'individuality' maximum random weight (this should really be between 0, 1)
-      themWeight     => 2.0,	# 'social' weighting constant (higher weight (than individual) means trust group more, self less)
-      themMin        => 0.0,	# 'social' minimum random weight (this should really be between 0, 1)
-      themMax        => 1.0,	# 'social' maximum random weight (this should really be between 0, 1)
-      exitFitness    => 1.0,	# minimum fitness to achieve before exiting (if maxIterations is reached before, then program will exit with no solution)
-      verbose        => 0,      # 0 prints solution, 1 prints particle:fitness at each iteration, 2 dumps each particle (+1)
+      numParticles   => 4,     # total number of particles involved in search 
+      numNeighbors   => 3,     # number of particles with which each particle will share its progress
+      maxIterations  => 1000,  # maximum number of iterations before exiting with no solution found
+      dimensions     => 4,     # number of parameters you want to optimize
+      deltaMin       => -4.0,  # minimum change in velocity during PSO update
+      deltaMax       =>  4.0,  # maximum change in velocity during PSO update
+      meWeight       => 2.0,   # 'individuality' weighting constant (higher means more individuality)
+      meMin          => 0.0,   # 'individuality' minimum random weight
+      meMax          => 1.0,   # 'individuality' maximum random weight
+      themWeight     => 2.0,   # 'social' weighting constant (higher means trust group more)
+      themMin        => 0.0,   # 'social' minimum random weight 
+      themMax        => 1.0,   # 'social' maximum random weight
+      exitFitness    => 0.9,   # minimum fitness to achieve before exiting
+      verbose        => 0,     # 0 prints solution
+                               # 1 prints (Y|N):particle:fitness at each iteration
+                               # 2 dumps each particle (+1)
+      psoRandomRange => 4.0,   # setting this enables the original PSO algorithm and
+                               # also subsequently ignores the  me*/them* parameters
   );
 
 
   sub custom_fitness_function(@input) {	
-        # this is a callback function.  @input will be passed to this, you do not need to worry about setting it...
+        # this is a callback function.  
+        # @input will be passed to this, you do not need to worry about setting it...
         # ... do something with @input which is an array of floats
         # return a value in [0,1] with 0 being the worst and 1 being the best
   }
@@ -467,109 +491,168 @@ PSO - Perl module for running the Particle Swarm Optimization algorithm
   pso_optimize();
   my @solutionArray = pso_get_solution_array();
 
-
+E<32>
 
 =head2  General Guidelines
 
-=over 4
+=over 2
 
-=item * I suggest that meWeight and themWeight add up up to 4.0
+=item 1. Sociality versus individuality
 
-=item * If you have a large search space, increasing deltaMin and deltaMax and delta max can help cover more area
-		Conversely, if you have a small search space, then decreasing them will fine tune the search.
+    I suggest that meWeight and themWeight add up up to 4.0, or that 
+    psoRandomRange = 4.0.  Also, you should also be setting meMin 
+    and themMin to 0, and meMin and themMax to 1 unless you really 
+    know what you are doing.
 
-=item * You really should set meMin and themMin to 0, and meMin and themMin to 1 unless you know what you are doing.
+=item 2. Search space coverage
 
-=item * I've personally found that using a global (fully connected) topology where each particle is neighbors with
-		all other particles (numNeighbors == numParticles - 1) converges more quickly.  However, this will drastically
-		increase the number of calls to your fitness function.  So, if your fitness function is the bottleneck, then
-		you should tune this value for the appropriate time/accuracy trade-off.
+    If you have a large search space, increasing deltaMin and deltaMax 
+    and delta max can help cover more area. Conversely, if you have a 
+    small search space, then decreasing them will fine tune the search.
 
-=item * The number of particles also increases cooperation and search space coverage at the expense of compute.
-        Typical applications should suffice using 20-40 particles.
+=item 3. Swarm Topology
 
-=item * NOTE: I force people to define all parameters, but guidelines 1-3 are standard and pretty safe.
+    I've personally found that using a global (fully connected) topology 
+    where each particle is neighbors with all other particles 
+    (numNeighbors == numParticles - 1) converges more quickly.  However, 
+    this will drastically increase the number of calls to your fitness 
+    function.  So, if your fitness function is the bottleneck, then you 
+    should tune this value for the appropriate time/accuracy trade-off.  
+    Also, I highly suggest you implement a simple fitness cache so you 
+    don't end up recomputing fitness values.  This can easily be done 
+    with a perl hash that is keyed on the string concatenation of the 
+    array values passed to your fitness function.  Note that these are 
+    floating point values, so determine how significant the values are 
+    and you can use sprintf to essentially limit the precision of the 
+    particle positions.
+
+=item 4. Number of particles
+
+    The number of particles increases cooperation and search space 
+    coverage at the expense of compute.  Typical applications should 
+    suffice using 20-40 particles.
+
+=back
+
+=over 8
+
+=item * NOTE: 
+
+    I force people to define all parameters, but guidelines 1-4 are 
+    standard and pretty safe.
 
 =back
 
 
-=head1 DESCRIPTION
+=head1 DESCRIPTION OF ALGORITHM
 
-=over 4
-  Particle Swarm Optimization is an optimization algorithm designed by Russell Eberhart 
-  and James Kennedy from Purdue University.  The algorithm itself is 
-  based off of the emergent behavior among societal groups ranging from ants, 
-  to flocking of birds, to swarming of bees.
+  Particle Swarm Optimization is an optimization algorithm designed by 
+  Russell Eberhart and James Kennedy from Purdue University.  The 
+  algorithm itself is based off of the emergent behavior among societal 
+  groups ranging from marching of ants, to flocking of birds, to 
+  swarming of bees.
 
-  It is a cooperative approach to optimization.  Instead of an evolutionary 
-  approach which kills off unsuccessful members of the search team, each 
-  particle in PSO shares its information with its neighboring particles.
-  So, if one particle is not doing to well (has a low fitness), then it looks 
-  to its neighbors for help and tries to be more like them while still 
-  maintaining a sense of individuality.
+  PSO is a cooperative approach to optimization rather than an 
+  evolutionary approach which kills off unsuccessful members of the 
+  search team.  In the swarm framework each particle, is a relatively 
+  unintelligent search agent.  It is in the collective sharing of 
+  knowledge that solutions are found.  Each particle simply shares its 
+  information with its neighboring particles.  So, if one particle is 
+  not doing to well (has a low fitness), then it looks to its neighbors 
+  for help and tries to be more like them while still maintaining a 
+  sense of individuality.
 
-  A particle is defined by its position and velocity.  The parameters a user 
-  wants to optimize define the dimension of the problem hyperspace.  So, if 
-  you want to optimize three variables, a particle will be three dimensional 
-  and will have 3 position values, 3 velocity values etc.
+  A particle is defined by its position and velocity.  The parameters a 
+  user wants to optimize define the dimensionality of the problem 
+  hyperspace.  So, if you want to optimize three variables, a particle 
+  will be three dimensional and will have 3 values that devine its 
+  position 3 values that define its velocity.  The position of a 
+  particle determines how good it is by a user-defined fitness function.  
+  The velocity of a particle determines how quickly it changes location.  
+  Larger velocities provide more coverage of hyperspace at the cost of 
+  solution precision.  With large velocities, a particle may come close 
+  to a maxima but over-shoot it because it is moving too quickly.  With 
+  smaller velocities, particles can really hone in on a local solution 
+  and find the best position but they may be missing another, possibly 
+  even more optimal, solution because a full search of the hyperspace 
+  was not conducted.  Techniques such as simulated annealing can be 
+  applied in certain areas so that the closer a partcle gets to a 
+  solution, the smaller its velocity will be so that in bad areas of 
+  the hyperspace, the particles move quickly, but in good areas, they 
+  spend some extra time looking around.
 
-  Particles fly around the problem hyperspace looking for local/global maxima.  
-  At each position, a particle computes its fitness.  If it does not meet the 
-  exit criteria then it gets information from neighboring particles about how well 
-  they are doing.  If a neighboring particle is doing better, then the current 
-  particle tries to move closer to its neighbor by adjusting its weights.  The 
-  velocity controls how quickly a particle changes location in the problem 
-  hyperspace.  There are also some stochastic weights involved in the positional 
-  updates so that each particle is truly independent and can take its own search 
-  path while still incorporating good information from other particles.
+  In general, particles fly around the problem hyperspace looking for 
+  local/global maxima.  At each position, a particle computes its 
+  fitness.  If it does not meet the exit criteria then it gets 
+  information from neighboring particles about how well they are doing.  
+  If a neighboring particle is doing better, then the current particle 
+  tries to move closer to its neighbor by adjusting its position.  As 
+  mentioned, the velocity controls how quickly a particle changes 
+  location in the problem hyperspace.  There are also some stochastic 
+  weights involved in the positional updates so that each particle is 
+  truly independent and can take its own search path while still 
+  incorporating good information from other particles.  In this 
+  particluar perl module, the user is able to choose from two 
+  implementations of the algorithm.  One is the original implementation 
+  from I<Swarm Intelligence> which requires the definition of a 
+  'random range' to which the two stochastic weights are required to 
+  sum.  The other implementation allows the user to define the weighting
+  of how much a particle follows its own path versus following its 
+  peers.  In both cases there is an element of randomness.
 
-  Solution convergence is quite fast once one particle becomes close to a local 
-  maxima.  Having more particles active means there is more of a chance that you 
-  will not be stuck in a local maxima.  Often times different neighborhoods 
-  (when not configured in a global neighborhood fashion) will converge to different 
-  maxima.  It is quite interesting to watch graphically.
+  Solution convergence is quite fast once one particle becomes close to 
+  a local maxima.  Having more particles active means there is more of 
+  a chance that you will not be stuck in a local maxima.  Often times 
+  different neighborhoods (when not configured in a global neighborhood 
+  fashion) will converge to different maxima.  It is quite interesting 
+  to watch graphically.  If the fitness function is expensive to 
+  compute, then it is often useful to start out with a small number of
+  particles first and get a feel for how the algorithm converges.
 
-  The algorithm implemented in this module is taken from the book Swarm Intelligence 
-  by Russell Eberhart and James Kennedy.  I highly suggest you read the book if you 
-  are interested in this sort of thing.  There are a few minor implementation changes 
-  I have made, but the heart of the algorithm is as stated in the book.
-
+  The algorithm implemented in this module is taken from the book 
+  I<Swarm Intelligence> by Russell Eberhart and James Kennedy.  
+  I highly suggest you read the book if you are interested in this 
+  sort of thing.  
 
 
 =head1 EXPORTED FUNCTIONS
 
 =over 4
 
-=item * pso_set_params(%config_hash)
+=item pso_set_params()
 
   Sets the particle swarm configuration parameters to use for the search.
 
-=item * pso_register_fitness_function()
- 
-  Sets the user defined fitness function to call.  The fitness function should 
-  return a value between 0 and 1.  Users may want to look into the sigmoid 
-  function [1 / (1+e^(-x))] and it's variants to implement this.
-  Also, you may want to take a look at either t/PSO.t for the simple test or 
-  examples/NeuralNetwork/pso_ann.pl for an example on how to train a simple 3-layer 
-  feed forward neural network.  (Note that a real training application would have a 
-  real dataset with many input-output pairs...pso_ann.pl is a _very_ simple example.
-  Also note that the neural network exmaple requires g++.  Type 'make run' in the 
-  examples/NeuralNetwork directory to run the example.  Lastly, the neuraal network
-  c++ code is in a very different coding style.  I did indeed write this, but it was
-  many years ago when I was striving to make my code nicely formatted and good looking :)).
+=item pso_register_fitness_function()
 
-=item * pso_optimize()
+  Sets the user defined fitness function to call.  The fitness function 
+  should return a value between 0 and 1.  Users may want to look into 
+  the sigmoid function [1 / (1+e^(-x))] and it's variants to implement 
+  this.  Also, you may want to take a look at either t/PSO.t for the 
+  simple test or examples/NeuralNetwork/pso_ann.pl for an example on 
+  how to train a simple 3-layer feed forward neural network.  (Note 
+  that a real training application would have a real dataset with many 
+  input-output pairs...pso_ann.pl is a _very_ simple example.  Also note 
+  that the neural network exmaple requires g++.  Type 'make run' in the 
+  examples/NeuralNetwork directory to run the example.  Lastly, the 
+  neural network c++ code is in a very different coding style.  I did 
+  indeed write this, but it was many years ago when I was striving to 
+  make my code nicely formatted and good looking :)).
 
-  Runs the particle swarm optimization algorithm.  This consists of running 
-  iterations of search and many calls to the fitness function you registered 
-  with pso_register_fitness_function()
+=item pso_optimize()
 
-=item * pso_get_solution_array()
+  Runs the particle swarm optimization algorithm.  This consists of 
+  running iterations of search and many calls to the fitness function 
+  you registered with pso_register_fitness_function()
 
-  By default, pso_optimize() will print out to STDERR the first solution, or the best 
-  solution so far if the max iterations were reached.  This function will simply return 
-  an array of the winning (or best so far) position of the entire swarm system.  It is an 
-  array of floats to be used how you wish (like weights in a neural network!).
+=item pso_get_solution_array()
+
+  By default, pso_optimize() will print out to STDERR the first 
+  solution, or the best solution so far if the max iterations were 
+  reached.  This function will simply return an array of the winning 
+  (or best so far) position of the entire swarm system.  It is an 
+  array of floats to be used how you wish (like weights in a 
+  neural network!).
 
 =back
 
@@ -579,8 +662,9 @@ PSO - Perl module for running the Particle Swarm Optimization algorithm
 
 =over 4
 
-=item * examples/NeuralNet/pso_ann.pl
-=item * t/PSO.t
+=item examples/NeuralNet/pso_ann.pl
+
+=item t/PSO.t
 
 =back
 
@@ -588,12 +672,12 @@ PSO - Perl module for running the Particle Swarm Optimization algorithm
 
 =head1 SEE ALSO
 
-1.  Swarm intelligence by James Kennedy and Russell C. Eberhart. 
+1.  I<Swarm intelligence> by James Kennedy and Russell C. Eberhart. 
     ISBN 1-55860-595-9
 
 2.  A Hybrid Particle Swarm and Neural Network Approach for Reactive Power Control
-    AI-PSO-$VERSION/extradocs/ReactivePower-PSO-wks.pdf
-    http://webapps.calvin.edu/~pribeiro/courses/engr302/Samples/ReactivePower-PSO-wks.pdf
+    AI-PSO-0.86/extradocs/ReactivePower-PSO-wks.pdf
+    L<http://webapps.calvin.edu/~pribeiro/courses/engr302/Samples/ReactivePower-PSO-wks.pdf>
 
 
 
@@ -610,6 +694,6 @@ Copyright (C) 2006 by W. Kyle Schlansker
 
 This code is released under the Mozilla Public License Version 1.1.
 A copy of this license may be found along with this module or at:
-http://www.mozilla.org/MPL/MPL-1.1.txt
+L<http://www.mozilla.org/MPL/MPL-1.1.txt>
 
 =cut

@@ -1,4 +1,4 @@
-use Test::More tests => 5;
+use Test::More tests => 9;
 BEGIN { use_ok('AI::PSO') };
 
 my %test_params = (
@@ -18,6 +18,9 @@ my %test_params = (
 	verbose        => 1,
 );
 
+my %test_params2 = %test_params;
+$test_params2{psoRandomRange} = 4.0;
+
 # simple test function to sum the position values up to 3.5
 my $testValue = 3.5;
 sub test_fitness_function(@) {
@@ -35,7 +38,13 @@ sub test_fitness_function(@) {
 
 
 ok( pso_set_params(\%test_params) == 0 );
-ok( pso_register_fitness_function('test_fitness_function') == 0);
+ok( pso_register_fitness_function('test_fitness_function') == 0 );
 ok( pso_optimize() == 0 );
 my @solution = pso_get_solution_array();
-ok( $#solution == $test_params{numParticles} - 1);
+ok( $#solution == $test_params{numParticles} - 1 );
+
+ok( pso_set_params(\%test_params2) == 0 );
+ok( pso_register_fitness_function('test_fitness_function') == 0 );
+ok( pso_optimize() == 0 );
+my @solution2 = pso_get_solution_array();
+ok( $#solution2 == $test_params2{numParticles} - 1 );
